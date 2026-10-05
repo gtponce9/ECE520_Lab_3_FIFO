@@ -52,7 +52,7 @@ architecture Behavioral of FIFO_gp_tb is
     signal almost_empty : std_logic;
     signal full         : std_logic;
     signal empty        : std_logic;
-
+    signal restart_check : std_logic := '0';  -- tells the checker to restart its read counter
 
     type value_array is array (natural range <>) of std_logic_vector(WIDTH-1 downto 0);
 
@@ -140,16 +140,17 @@ begin
             wait for CLK_PERIOD / 2;
     end process;
 
-    -- Stimulus
+     -- Stimulus
     stim_process : process
     begin
+---------------------------------------------------------------------------------------------------------------    
         -- Reset asserted for the first 5 clock cycles
         srst <= '1';
         for i in 1 to 5 loop
             wait until rising_edge(clk);
         end loop;
         srst <= '0';
-
+---------------------------------------------------------------------------------------------------------------
         -- Write all values (one per clock cycle)
         for i in 0 to NUM_WORDS-1 loop
             wait until rising_edge(clk);
@@ -170,12 +171,41 @@ begin
         end loop;
         read_enable <= '0';
 
-        -- Let the output pipeline flush (wait 5 clock cycles)
+        -- Let the output pipeline flush
         for i in 1 to 5 loop
             wait until rising_edge(clk);
         end loop;
+-------------------------------------------------------------------------------------------------------------------
+        -- Restart the checker's read counter for the simultaneous tests
+        wait until rising_edge(clk);
+        restart_check <= '1';
+        wait until rising_edge(clk);
+        restart_check <= '0';
 
- -- Manually write three values from the table
+        -- Prime the FIFO with one value so there is something to read
+        wait until rising_edge(clk);
+        write_enable <= '1';
+        data_in      <= TEST_VALUES(0);
+
+        -- Simultaneous read/write test 1: write value 1, read value 0
+        wait until rising_edge(clk);
+        read_enable  <= '1';
+        data_in      <= TEST_VALUES(1);
+
+        -- Simultaneous read/write test 2: write value 2, read value 1
+        wait until rising_edge(clk);
+        data_in      <= TEST_VALUES(2);
+
+        -- Simultaneous read/write test 3: write value 3, read value 2
+        wait until rising_edge(clk);
+        data_in      <= TEST_VALUES(3);
+
+        -- End the simultaneous tests
+        wait until rising_edge(clk);
+        write_enable <= '0';
+        read_enable  <= '0';
+
+        -- Manually write three values from the table
         wait until rising_edge(clk);
         write_enable <= '1';
         data_in      <= TEST_VALUES(0);
@@ -185,12 +215,11 @@ begin
 
         wait until rising_edge(clk);
         data_in      <= TEST_VALUES(2);
-        
-        wait until rising_edge(clk);    
+
+        wait until rising_edge(clk);
         write_enable <= '0';
 
-
-        -- Wait a couple of cycles so data_count can be seen at 3
+        -- Wait a couple of cycles so data_count can be seen
         wait until rising_edge(clk);
         wait until rising_edge(clk);
 
@@ -200,6 +229,11 @@ begin
             wait until rising_edge(clk);
         end loop;
         srst <= '0';
+
+        -- A few idle cycles so you can see the FIFO return to empty
+        for i in 1 to 5 loop
+            wait until rising_edge(clk);
+        end loop;
         wait;
     end process;
 
@@ -208,6 +242,9 @@ begin
         variable idx : natural := 0;
     begin
         if rising_edge(clk) then
+            if restart_check = '1' then
+                idx := 0;
+            end if;
             if valid = '1' then
                 assert idx < NUM_WORDS
                     report "Received more than " & integer'image(NUM_WORDS) & " values!" severity error;
@@ -221,5 +258,4 @@ begin
             end if;
         end if;
     end process;
-
 end Behavioral;
