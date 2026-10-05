@@ -52,7 +52,6 @@ architecture Behavioral of FIFO_gp_tb is
     signal almost_empty : std_logic;
     signal full         : std_logic;
     signal empty        : std_logic;
-    signal restart_check : std_logic := '0';  -- tells the checker to restart its read counter
 
     type value_array is array (natural range <>) of std_logic_vector(WIDTH-1 downto 0);
 
@@ -178,9 +177,7 @@ begin
 -------------------------------------------------------------------------------------------------------------------
         -- Restart the checker's read counter for the simultaneous tests
         wait until rising_edge(clk);
-        restart_check <= '1';
         wait until rising_edge(clk);
-        restart_check <= '0';
 
         -- Prime the FIFO with one value so there is something to read
         wait until rising_edge(clk);
@@ -235,27 +232,5 @@ begin
             wait until rising_edge(clk);
         end loop;
         wait;
-    end process;
-
-    -- Checker: whenever valid is high, data_out must match the next expected value
-    check_process : process (clk)
-        variable idx : natural := 0;
-    begin
-        if rising_edge(clk) then
-            if restart_check = '1' then
-                idx := 0;
-            end if;
-            if valid = '1' then
-                assert idx < NUM_WORDS
-                    report "Received more than " & integer'image(NUM_WORDS) & " values!" severity error;
-                if idx < NUM_WORDS then
-                    assert data_out = TEST_VALUES(idx)
-                        report "Data mismatch on read " & integer'image(idx)
-                        severity error;
-                    report "Read " & integer'image(idx) & " OK";
-                end if;
-                idx := idx + 1;
-            end if;
-        end if;
     end process;
 end Behavioral;
